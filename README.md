@@ -1,4 +1,4 @@
-# **🚀 ScriptPad v1.0 HTML – Professional Text & Script Editor**
+# **ScriptPad v1.0 HTML – Professional Text & Script Editor**
 
 **ScriptPad CLI** is a lightweight yet powerful premium text editor designed for developers, system administrators, and automation enthusiasts. Created by **polsoft.ITS London**, it combines a minimalist aesthetic with heavy-duty editing capabilities.
 
