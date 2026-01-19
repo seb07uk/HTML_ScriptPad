@@ -1,0 +1,1386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Text editor with line numbering</title>
+  <style>
+    :root {
+      /* Default (Light) */
+      --surface: #ffffff;
+      --text: #000000;
+      --border: rgba(127,127,127,.3);
+      --bg-gutter: rgba(127,127,127,.12);
+      --bg-active: rgba(127,127,127,.2);
+      --bg-hover: rgba(127,127,127,.18);
+      --bg-menu: rgba(127,127,127,.08);
+      color-scheme: light;
+    }
+
+    /* Dark Theme */
+    .dark {
+      --surface: #1e1e1e;
+      --text: #d4d4d4;
+      --border: rgba(255,255,255,.2);
+      --bg-gutter: #252526;
+      --bg-active: #37373d;
+      --bg-hover: #2a2d2e;
+      --bg-menu: #2d2d2d;
+      color-scheme: dark;
+    }
+
+    /* Silver Theme */
+    [data-theme="silver"] {
+      --surface: #f0f0f0;
+      --text: #202020;
+      --border: #a0a0a0;
+      --bg-gutter: #d0d0d0;
+      --bg-active: #c0c0c0;
+      --bg-hover: #e0e0e0;
+      --bg-menu: #e8e8e8;
+      background: #e0e0e0;
+      color: #202020;
+      color-scheme: light;
+    }
+
+    /* Blue Theme */
+    [data-theme="blue"] {
+      --surface: #e6f7ff;
+      --text: #003a8c;
+      --border: #91d5ff;
+      --bg-gutter: #bae7ff;
+      --bg-active: #69c0ff;
+      --bg-hover: #91d5ff;
+      --bg-menu: #e6f7ff;
+      background: #f0f5ff;
+      color: #002766;
+      color-scheme: light;
+    }
+
+    /* Red Theme */
+    [data-theme="red"] {
+      --surface: #fff1f0;
+      --text: #820014;
+      --border: #ffa39e;
+      --bg-gutter: #ffccc7;
+      --bg-active: #ff7875;
+      --bg-hover: #ff9c6e;
+      --bg-menu: #fff0f6;
+      background: #fff0f6;
+      color: #5c0011;
+      color-scheme: light;
+    }
+
+    body { margin: 0; font-family: Consolas, 'Courier New', monospace; background: var(--surface); color: var(--text); }
+    .wrap { height: 100vh; display: grid; grid-template-rows: auto 1fr; }
+    .toolbar { padding: 8px 12px; border-bottom: 1px solid var(--border); display: flex; gap: 8px; align-items: center; }
+    .editor { height: 100%; display: grid; grid-template-columns: 56px 3fr 1fr; }
+    .gutter { width: 56px; overflow: hidden auto; background: var(--bg-gutter); border-right: 1px solid var(--border); }
+    .gutter ol { list-style: none; margin: 0; padding: 8px 8px 8px 12px; counter-reset: ln; }
+    .gutter li { counter-increment: ln; padding: 0 4px; line-height: 1.4; cursor: pointer; }
+    .gutter li::before { content: counter(ln); opacity: .7; }
+    .gutter li.active { background: var(--bg-active); border-radius: 4px; }
+    textarea { width: 100%; height: 100%; border: 0; resize: none; padding: 8px; font: inherit; line-height: 1.4; background: transparent; color: inherit; }
+    textarea:focus { outline: none; }
+    .status { margin-left: auto; opacity: .7; font-size: 12px; }
+    button { padding: 6px 10px; font: inherit; }
+    .menubar { display: flex; gap: 8px; padding: 6px 8px; border-bottom: 1px solid var(--border); background: var(--bg-menu); color: var(--text); }
+    .menu { position: relative; }
+    .menu-title { padding: 4px 8px; border-radius: 4px; user-select: none; color: var(--text); }
+    .menu-title:hover { background: var(--bg-hover); }
+    .menu-items { position: absolute; top: 100%; left: 0; min-width: 220px; background: var(--surface); color: var(--text); border: 1px solid var(--border); box-shadow: 0 2px 8px rgba(0,0,0,.15); display: none; z-index: 10; }
+    .menu[data-menu="file"] .menu-items { left: 0; }
+    .menu.open .menu-items { display: block; }
+    .menu-items button { width: 100%; text-align: left; padding: 6px 10px; border: 0; background: transparent; color: var(--text); }
+    .menu-items button:hover { background: var(--bg-hover); }
+    .submenu { display: none; padding-left: 12px; margin-top: 4px; border-top: 1px solid var(--border); }
+    .menu[data-menu="file"] .submenu { position: absolute; top: 0; min-width: 220px; max-height: 70vh; overflow: auto; background: var(--surface); color: var(--text); border: 1px solid var(--border); box-shadow: 0 2px 8px rgba(0,0,0,.15); opacity: 0; pointer-events: none; z-index: 11; transition: transform .2s ease, opacity .2s ease; }
+    .menu[data-menu="file"] .submenu.open { opacity: 1; pointer-events: auto; transform: translateX(0); }
+    .menu[data-menu="file"] .submenu[data-submenu="new"] { left: 100%; right: auto; transform: translateX(-8px); }
+    .menu[data-menu="file"] .submenu[data-submenu="templates"] { left: 100%; right: auto; transform: translateX(-8px); }
+    .menu[data-menu="file"] .submenu[data-submenu="templates-java"] { left: 200%; right: auto; transform: translateX(-8px); }
+    .menu[data-menu="file"] .submenu[data-submenu="templates-js"] { left: 200%; right: auto; transform: translateX(-8px); }
+    .separator { border-top: 1px solid var(--border); margin: 4px 0; }
+    .separator.thick { border-top: 3px solid var(--border); margin: 8px 0; }
+    .submenu.open { display: block; }
+    .modal { position: fixed; inset: 0; background: rgba(0,0,0,.4); display: none; align-items: center; justify-content: center; z-index: 50; }
+    .modal .box { background: var(--surface); color: var(--text); border: 1px solid var(--border); padding: 16px; width: 420px; max-width: 90vw; border-radius: 6px; }
+    .row { display: flex; gap: 8px; align-items: center; }
+    .about { text-align: center; display: flex; flex-direction: column; gap: 6px; }
+    .about h1 { font-size: 20px; margin: 4px 0 8px; }
+    .about a { color: inherit; text-decoration: underline; }
+    .sidebar { overflow: auto; background: var(--bg-menu); border-left: 1px solid var(--border); display: flex; flex-direction: column; }
+    .sidebar-header { padding: 8px 10px; font-weight: 600; border-bottom: 1px solid var(--border); }
+    .sidebar-body { padding: 8px 10px; display: grid; gap: 8px; }
+    .tree { font-size: 13px; }
+    .tree ul { list-style: none; margin: 4px 0 0; padding-left: 14px; }
+    .tree li { margin: 2px 0; }
+    .tree .dir { cursor: default; }
+    .tree .file { cursor: pointer; }
+    .tree .file:hover { text-decoration: underline; }
+    .tree .toggle { margin-right: 6px; width: 22px; height: 22px; padding: 0; }
+    .codepane { position: relative; }
+    #hl { position: absolute; inset: 0; padding: 8px; overflow: hidden auto; font: inherit; line-height: 1.4; color: transparent; pointer-events: none; }
+    #hl .t { color: transparent; white-space: pre-wrap; word-break: break-word; }
+    .hl { background: rgba(255,215,0,.35); color: inherit; }
+    .sidebar-body input[type="search"] { width: 100%; padding: 6px 8px; font: inherit; }
+    .CodeMirror { height: 100%; font: inherit; line-height: 1.4; background: transparent; color: inherit; }
+    .cm-markTexe { background: rgba(255,215,0,.35); }
+  </style>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/search/searchcursor.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/clike/clike.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/python/python.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/shell/shell.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/powershell/powershell.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/vb/vb.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/xml/xml.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/javascript/javascript.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/css/css.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/htmlmixed/htmlmixed.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/markdown/markdown.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/properties/properties.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/groovy/groovy.min.js"></script>
+</head>
+<body>
+  <div class="wrap">
+    <div class="menubar" id="menubar">
+      <div class="menu" data-menu="file">
+        <div class="menu-title">File</div>
+        <div class="menu-items">
+          <button data-action="newMenu">New (Ctrl+N)</button>
+          <div class="submenu" data-submenu="new">
+            <button data-action="newRaw">RAW (.raw)</button>
+            <button data-action="newTxt">TXT (.txt)</button>
+            <div class="separator"></div>
+          <button data-action="newVbs">Visual Basic Script (.vbs)</button>
+          <button data-action="newPs1">PowerShell (.ps1)</button>
+          <button data-action="newBat">Batch (.bat)</button>
+          <button data-action="newSh">Bash (.sh)</button>
+          <button data-action="newPy">Python (.py)</button>
+          <button data-action="newCpp">C++ (.cpp)</button>
+          <button data-action="newJson">JSON (.json)</button>
+          <button data-action="newCss">CSS (.css)</button>
+          <button data-action="newJs">JavaScript (.js)</button>
+          <button data-action="newHta">HTA (.hta)</button>
+          <button data-action="newReg">REG (.reg)</button>
+          <button data-action="newMd">Markdown (.md)</button>
+          <button data-action="newJava">Java (.java)</button>
+          <button data-action="newPomXml">Maven POM (pom.xml)</button>
+          <button data-action="newGradle">Gradle Build (build.gradle)</button>
+          <button data-action="newManifest">Java Manifest (MANIFEST.MF)</button>
+          <div class="separator thick"></div>
+          </div>
+          <button data-action="templatesMenu">Templates</button>
+          <div class="submenu" data-submenu="templates">
+            <button data-action="tplCppHello">C++: Hello</button>
+            <button data-action="tplShBackup">Bash: Backup</button>
+            <button data-action="tplBatHello">Batch: Hello</button>
+            <button data-action="tplJsonConfig">JSON: Config</button>
+            <button data-action="tplHtaStarter">HTA: Starter</button>
+            <button data-action="tplPsService">PowerShell: Service</button>
+            <button data-action="tplVbsMsgBox">VBS: MsgBox</button>
+            <button data-action="templatesJavaMenu">Java ▶</button>
+            <button data-action="templatesJsMenu">JavaScript ▶</button>
+          </div>
+          <div class="submenu" data-submenu="templates-js">
+            <button data-action="tplJsNodeHello">JavaScript: Node Hello</button>
+            <button data-action="tplJsBrowserDom">JavaScript: Browser DOM</button>
+            <button data-action="tplJsAxiosCdn">JavaScript: Axios (CDN)</button>
+            <button data-action="tplJsLodashCdn">JavaScript: Lodash (CDN)</button>
+            <button data-action="tplJsPackageJson">JavaScript: package.json</button>
+          </div>
+          <div class="submenu" data-submenu="templates-java">
+            <button data-action="tplJavaHello">Java: Hello</button>
+            <button data-action="tplJavaPom">Java: Maven POM</button>
+            <button data-action="tplJavaGradle">Java: Gradle Build</button>
+            <button data-action="tplJavaManifest">Java: Manifest</button>
+          </div>
+          <button data-action="open">Open (Ctrl+O)</button>
+          <button data-action="edit">Edit</button>
+          <button data-action="save">Save (Ctrl+S)</button>
+          <button data-action="saveAs">Save As... (Ctrl+Shift+S)</button>
+          <button data-action="exit">Exit (Alt+F4)</button>
+        </div>
+      </div>
+      <div class="menu" data-menu="find">
+        <div class="menu-title">Find</div>
+        <div class="menu-items">
+          <button data-action="find">Find Text (Ctrl+F)</button>
+          <button data-action="gotoLine">Go to Line… (Ctrl+G)</button>
+        </div>
+      </div>
+      <div class="menu" data-menu="view">
+        <div class="menu-title">View</div>
+        <div class="menu-items">
+          <button data-action="topmost">TopMost</button>
+          <button data-action="fullscreen">Full Screen (F11)</button>
+          <button data-action="themeMenu">Themes</button>
+          <div class="submenu" data-submenu="theme">
+            <button data-action="themeDark">Dark Mode</button>
+            <button data-action="themeLight">Light Mode</button>
+            <button data-action="themeSilver">Silver Mode</button>
+            <button data-action="themeBlue">Blue Mode</button>
+            <button data-action="themeRed">Red Mode</button>
+          </div>
+        </div>
+      </div>
+      <div class="menu" data-menu="about">
+        <div class="menu-title">About</div>
+        <div class="menu-items">
+          <button data-action="about">About</button>
+          <button data-action="help">Help</button>
+          <button data-action="readme">ReadMe</button>
+          <button data-action="license">License</button>
+        </div>
+      </div>
+      <div class="status" id="status">Line: 1, Column: 1</div>
+    </div>
+    
+    <div class="editor">
+      <div class="gutter"><ol id="lines"><li class="active" data-ln="1"></li></ol></div>
+      <div class="codepane">
+        <div id="hl"><div class="t"></div></div>
+        <textarea id="text" spellcheck="false"></textarea>
+      </div>
+      <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">Side Panel <button id="btnScripts">Scripts</button></div>
+        <div class="sidebar-body">
+          <div class="row"><input id="sidebarSearch" type="search" placeholder="Search..." /></div>
+          <div id="scriptsTree" class="tree"></div>
+        </div>
+      </aside>
+    </div>
+  </div>
+  <input type="file" id="file" accept=".txt,.md,.log,.csv,.json,.xml,.ini,.cfg" style="display:none" />
+  <div class="modal" id="modal">
+    <div class="box" id="modalBox"></div>
+  </div>
+  <script>
+    const ta = document.getElementById('text');
+    const ol = document.getElementById('lines');
+    const status = document.getElementById('status');
+    const fileInput = document.getElementById('file');
+    
+    const menubar = document.getElementById('menubar');
+    const modal = document.getElementById('modal');
+    const modalBox = document.getElementById('modalBox');
+    const sidebarSearch = document.getElementById('sidebarSearch');
+    const scriptsTree = document.getElementById('scriptsTree');
+    const btnScripts = document.getElementById('btnScripts');
+    const editorEl = document.querySelector('.editor');
+    const hl = document.getElementById('hl');
+    const hlText = hl && hl.querySelector('.t');
+    let hlQuery = '';
+    const settingsKey = 'scriptpad-settings';
+    const settings = { theme: 'light', editorColumns: '56px 3fr 1fr', scriptsFolder: '%USERPROFILE%\\.polsoft\\Scripts\\' };
+    let settingsDirHandle = null;
+    let scriptsHandle = null;
+    let suggestName = 'file.txt';
+    let cm = null;
+    let cmMarks = [];
+
+    function updateLines() {
+      const count = (ta.value.match(/\n/g) || []).length + 1;
+      const frag = document.createDocumentFragment();
+      for (let i = 0; i < count; i++) {
+        const li = document.createElement('li');
+        li.dataset.ln = String(i + 1);
+        frag.appendChild(li);
+      }
+      ol.innerHTML = '';
+      ol.appendChild(frag);
+      updateActiveLine();
+    }
+
+    function caretLineAndColumn() {
+      if (cm) { const c = cm.getCursor(); return { line: c.line + 1, col: c.ch + 1 }; }
+      const pos = ta.selectionStart || 0;
+      const before = ta.value.slice(0, pos);
+      const lines = before.split('\n');
+      const line = lines.length;
+      const col = lines[lines.length - 1].length + 1;
+      return { line, col };
+    }
+
+    function updateActiveLine() {
+      const { line, col } = caretLineAndColumn();
+      const children = ol.children;
+      for (let i = 0; i < children.length; i++) {
+        children[i].classList.toggle('active', i === line - 1);
+      }
+      status.textContent = `Line: ${line}, Column: ${col}`;
+    }
+
+    function syncScroll() {
+      const top = cm ? cm.getScrollInfo().top : ta.scrollTop;
+      ol.parentElement.scrollTop = top;
+      if (hl) hl.scrollTop = top;
+    }
+
+    function setCaretToLine(line) {
+      if (cm) {
+        const max = cm.lineCount();
+        const l = Math.max(1, Math.min(line, max));
+        cm.focus();
+        cm.setCursor({ line: l - 1, ch: 0 });
+        updateActiveLine();
+        syncScroll();
+        return;
+      }
+      const max = (ta.value.match(/\n/g) || []).length + 1;
+      const l = Math.max(1, Math.min(line, max));
+      const parts = ta.value.split('\n');
+      let idx = 0;
+      for (let i = 0; i < l - 1; i++) idx += parts[i].length + 1;
+      ta.focus();
+      ta.setSelectionRange(idx, idx);
+      updateActiveLine();
+      syncScroll();
+    }
+
+    ta.addEventListener('input', () => { updateLines(); renderHighlight(); });
+    ta.addEventListener('scroll', syncScroll);
+    ta.addEventListener('keyup', updateActiveLine);
+    ta.addEventListener('click', updateActiveLine);
+    ta.addEventListener('mousedown', () => {
+      document.addEventListener('mouseup', updateActiveLine, { once: true });
+    });
+
+    ol.addEventListener('click', (e) => {
+      const li = e.target.closest('li');
+      if (!li) return;
+      const ln = parseInt(li.dataset.ln || '0', 10);
+      if (ln) setCaretToLine(ln);
+    });
+
+    
+
+    function showModal(text) {
+      modalBox.innerHTML = text;
+      modal.style.display = 'flex';
+    }
+    function hideModal() { modal.style.display = 'none'; }
+    modal.addEventListener('click', (e) => { if (e.target === modal) hideModal(); });
+
+    function handleAction(action) {
+      if (action === 'new') {
+        const content = [
+          'Author:   Sebastian Januchowski',
+          'Email:    polsoft.its@fastservice.com',
+          'GitHub:   https://github.com/seb07uk',
+          'Company:  2026(c) polsoft.ITS London',
+          '',
+          '',
+        ].join('\n');
+        suggestName = 'file.txt';
+        applyEditorModeByName(suggestName);
+        setEditorValue(content);
+        return;
+      }
+      if (action === 'newRaw') {
+        const content = [
+          ':: Created by Sebastian Januchowski',
+          ':: polsoft.its@fastservice.com',
+          ':: https://github.com/seb07uk',
+          ':: RAW file (.raw)',
+          '',
+          '',
+        ].join('\n');
+        suggestName = 'file.raw'; applyEditorModeByName(suggestName); setEditorValue(content); return;
+      }
+      if (action === 'newTxt') {
+        const content = [
+          ':: Created by Sebastian Januchowski',
+          ':: polsoft.its@fastservice.com',
+          ':: https://github.com/seb07uk',
+          ':: TXT file (.txt)',
+          '',
+          '',
+        ].join('\n');
+        suggestName = 'file.txt'; applyEditorModeByName(suggestName); setEditorValue(content); return;
+      }
+      if (action === 'newJava') {
+        const content = [
+          'public class Main {',
+          '  public static void main(String[] args) {',
+          '    System.out.println("Hello, Java!");',
+          '  }',
+          '}',
+          '',
+          '',
+        ].join('\n');
+        suggestName = 'Main.java'; applyEditorModeByName(suggestName); setEditorValue(content); return;
+      }
+      if (action === 'newVbs') {
+        const content = [
+'Author: Sebastian Januchowskii',
+'Email:  polsoft.its@fastservice.com',
+'GitHub: https://github.com/seb07uk',
+'Company: 2026(c) polsoft.ITS London',
+'Chomik: https://chomikuj.pl/polsoft-its',
+'Desc:   Visual Basic Scripting Edition',
+'',
+'',
+        ].join('\n');
+        suggestName = 'Script.vbs'; applyEditorModeByName(suggestName); setEditorValue(content); return;
+      }
+      if (action === 'newPs1') {
+        const content = [
+'<#',
+'.SYNOPSIS',
+'    Short description of script action.',
+'',
+'.DESCRIPTION',
+'    Detailed description - what the script does, its functions, problems it solves.',
+'',
+'.PARAMETER Param1',
+'    Description of first parameter.',
+'',
+'.PARAMETER Param2',
+'   Description of second parameter.',
+'',
+'.EXAMPLE',
+'    PS C:\\> .\\Script.ps1 -Param1 "value" -Param2 123',
+'    Shows usage example.',
+'',
+'.NOTES',
+'    Author:   Sebastian Januchowski',
+'    Email:    polsoft.its@fastservice.com',
+'    GitHub:   https://github.com/seb07uk',
+'    Company:  2026(c) polsoft.ITS London',
+' \u00a0\u00a0Title:  \u00a0 PowesShell Script (.ps1)',
+'#>',
+'',
+'',
+        ].join('\n');
+        suggestName = 'Script.ps1'; applyEditorModeByName(suggestName); setEditorValue(content); return;
+      }
+      if (action === 'newBat') {
+        const content = [
+          ':: Sebastian Januchowski',
+          ':: polsoft.its@fastservice.com',
+          ':: https://github.com/seb07uk',
+          ':: Company: 2026(c) polsoft.ITS London',
+          '',
+          '@echo off',
+          'Title TITLE',
+          'chcp 65001 >nul',
+          'EnableDelayedExpansion',
+          'cls',
+          '',
+          'echo CONTENT',
+          '',
+          'pause',
+        ].join('\n');
+        suggestName = 'Script.bat'; applyEditorModeByName(suggestName); setEditorValue(content); return;
+      }
+      
+      if (action === 'newJson') {
+        const content = [
+          '{',
+          '  "author": "Sebastian Januchowski",',
+          '  "email": "polsoft.its@fastservice.com",',
+          '  "github": "https://github.com/seb07uk",',
+          '  "company": "2026(c) polsoft.ITS London",',
+          '  "aktywny": true',
+          '}',
+          '',
+          '',
+        ].join('\n');
+        suggestName = 'Dane.json'; applyEditorModeByName(suggestName); setEditorValue(content); return;
+      }
+      if (action === 'newJs') {
+        const content = [
+          'function main() {',
+          '  console.log("Hello, JavaScript!");',
+          '}',
+          '',
+          'main();',
+          '',
+        ].join('\n');
+        suggestName = 'script.js'; applyEditorModeByName(suggestName); setEditorValue(content); return;
+      }
+      if (action === 'newPomXml') {
+        const content = [
+          '<project xmlns="http://maven.apache.org/POM/4.0.0"',
+          '         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"',
+          '         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">',
+          '  <modelVersion>4.0.0</modelVersion>',
+          '  <groupId>example</groupId>',
+          '  <artifactId>demo</artifactId>',
+          '  <version>1.0.0</version>',
+          '  <dependencies>',
+          '    <dependency>',
+          '      <groupId>org.apache.commons</groupId>',
+          '      <artifactId>commons-lang3</artifactId>',
+          '      <version>3.14.0</version>',
+          '    </dependency>',
+          '  </dependencies>',
+          '</project>',
+          '',
+        ].join('\n');
+        suggestName = 'pom.xml'; applyEditorModeByName(suggestName); setEditorValue(content); return;
+      }
+      if (action === 'newGradle') {
+        const content = [
+          'plugins {',
+          '  id "java"',
+          '}',
+          '',
+          'repositories {',
+          '  mavenCentral()',
+          '}',
+          '',
+          'dependencies {',
+          '  implementation "org.apache.commons:commons-lang3:3.14.0"',
+          '}',
+          '',
+        ].join('\n');
+        suggestName = 'build.gradle'; applyEditorModeByName(suggestName); setEditorValue(content); return;
+      }
+      if (action === 'newManifest') {
+        const content = [
+          'Manifest-Version: 1.0',
+          'Main-Class: Main',
+          'Class-Path: lib/commons-lang3-3.14.0.jar lib/other.jar',
+          '',
+        ].join('\n');
+        suggestName = 'MANIFEST.MF'; applyEditorModeByName(suggestName); setEditorValue(content); return;
+      }
+      if (action === 'newHta') {
+        const content = [
+          '<html>',
+          ' <head>',
+          '     <title>New HTA Script</title>',
+          '     <HTA:APPLICATION',
+          '         ID="polsoft.ITS"',
+          '         BORDER="thin"',
+          '         CAPTION="yes"',
+          '         SHOWINTASKBAR="yes"',
+          '         SINGLEINSTANCE="yes"',
+          '         WINDOWSTATE="normal"',
+          '     />',
+          '',
+          '',
+        ].join('\n');
+        suggestName = 'App.hta'; applyEditorModeByName(suggestName); setEditorValue(content); return;
+      }
+      if (action === 'newReg') {
+        const content = [
+          'Windows Registry Editor Version 5.00',
+          '',
+          '; Author: Sebastian Januchowski',
+          '; Email: polsoft.its@fastservice.com',
+          '',
+          '',
+        ].join('\n');
+        suggestName = 'Registry.reg'; applyEditorModeByName(suggestName); setEditorValue(content); return;
+      }
+      if (action === 'newMd') {
+        const content = [
+          '# Title',
+          '',
+          'Author: Sebastian Januchowski',
+          'Email: polsoft.its@fastservice.com',
+          'GitHub: https://github.com/seb07uk',
+          '',
+          '## Description',
+          '...',
+          '',
+          '',
+        ].join('\n');
+        suggestName = 'Document.md'; applyEditorModeByName(suggestName); setEditorValue(content); return;
+      }
+      if (action === 'newCss') {
+        const content = [
+          ':root {',
+          '  --bg: #ffffff;',
+          '  --text: #111827;',
+          '}',
+          'body {',
+          '  background: var(--bg);',
+          '  color: var(--text);',
+          '  font-family: system-ui, Segoe UI, Roboto, sans-serif;',
+          '}',
+          '',
+        ].join('\n');
+        suggestName = 'style.css'; applyEditorModeByName(suggestName); setEditorValue(content); return;
+      }
+      if (action === 'newSh') {
+        const content = [
+          '#!/bin/bash',
+          '# Name:    Bash script template',
+          '# Author:    Sebastian Januchowski',
+          '# Email:    polsoft.its@fastservice.com',
+          '# GitHub:   https://github.com/seb07uk',
+          '# Company:  2026(c) polsoft.ITS London',
+          '#',
+          '# SYNOPSIS:',
+          '#   Short description of script action.',
+          '#',
+          '# DESCRIPTION:',
+          '#   Detailed description - what the script does, its functions,',
+          '#   problems it solves.',
+          '#',
+          '# USAGE:',
+          '#   ./script.sh [options] [arguments]',
+          '#',
+          '# OPTIONS:',
+          '#   -h, --help      Shows help',
+          '#   -v, --verbose   Verbose mode',
+          '#',
+          '# EXAMPLES:',
+          '#   ./script.sh -h',
+          '#   ./script.sh -v file.txt',
+          '#',
+          '# REQUIREMENTS:',
+          '#   - Bash 4.0+',
+          '#   - Packages: curl, jq',
+          '#',
+          '# NOTES:',
+          '#   This header is consistent with good Bash script documentation practices.',
+          '# =========================================',
+          '',
+          '',
+        ].join('\n');
+        suggestName = 'Script.sh'; applyEditorModeByName(suggestName); setEditorValue(content); return;
+      }
+      if (action === 'newCpp') {
+        const content = [
+          '// Author:    Sebastian Januchowski',
+          '// Email:    polsoft.its@fastservice.com',
+          '// GitHub:   https://github.com/seb07uk',
+          '// Title:    C++ file (.cpp)',
+          '',
+          '#include <iostream>',
+          '',
+          'int main() {',
+          '    std::cout << "Hello, world!" << std::endl;',
+          '    return 0;',
+          '}',
+          '',
+          '',
+        ].join('\n');
+        suggestName = 'Program.cpp'; applyEditorModeByName(suggestName); setEditorValue(content); return;
+      }
+      if (action === 'newPy') {
+        const content = [
+          '# Author:    Sebastian Januchowski',
+          '# Email:    polsoft.its@fastservice.com',
+          '# GitHub:   https://github.com/seb07uk',
+          '# Title:    Python file (.py)',
+          '',
+          'def main():',
+          '    print("Hello, world!")',
+          '',
+          "if __name__ == '__main__':",
+          '    main()',
+          '',
+          '',
+        ].join('\n');
+        suggestName = 'Script.py'; applyEditorModeByName(suggestName); setEditorValue(content); return;
+      }
+      if (action === 'tplCppHello') {
+        const content = [
+          '#include <iostream>',
+          '',
+          'int main() {',
+          '    std::cout << "Hello templates!" << std::endl;',
+          '    return 0;',
+          '}',
+          '',
+        ].join('\n');
+        suggestName = 'hello.cpp'; applyEditorModeByName(suggestName); setEditorValue(content); return;
+      }
+      if (action === 'tplShBackup') {
+        const content = [
+          '#!/bin/bash',
+          'src=${1:-$HOME/Documents}',
+          'dest=${2:-$HOME/backup}',
+          'mkdir -p "$dest"',
+          'tar -czf "$dest/backup_$(date +%F).tar.gz" "$src"',
+          '',
+        ].join('\n');
+        suggestName = 'backup.sh'; applyEditorModeByName(suggestName); setEditorValue(content); return;
+      }
+      if (action === 'tplBatHello') {
+        const content = [
+          '@echo off',
+          'echo Hello from Batch!',
+          'pause',
+          '',
+        ].join('\n');
+        suggestName = 'hello.bat'; applyEditorModeByName(suggestName); setEditorValue(content); return;
+      }
+      if (action === 'tplJsonConfig') {
+        const content = [
+          '{',
+          '  "app": { "name": "ScriptPad", "version": "1.0.0" },',
+          '  "theme": "light",',
+          '  "features": { "autosave": true, "lint": false }',
+          '}',
+          '',
+        ].join('\n');
+        suggestName = 'config.json'; applyEditorModeByName(suggestName); setEditorValue(content); return;
+      }
+      if (action === 'tplHtaStarter') {
+        const content = [
+          '<html>',
+          '<head>',
+          '<title>HTA Starter</title>',
+          '</head>',
+          '<body>',
+          '<h1>Hello HTA</h1>',
+          '</body>',
+          '</html>',
+          '',
+        ].join('\n');
+        suggestName = 'app.hta'; applyEditorModeByName(suggestName); setEditorValue(content); return;
+      }
+      if (action === 'tplPsService') {
+        const content = [
+          '$name = "MyService"',
+          'New-Service -Name $name -BinaryPathName "C:\\MyApp\\app.exe" -DisplayName $name -StartupType Manual',
+          '',
+        ].join('\n');
+        suggestName = 'service.ps1'; applyEditorModeByName(suggestName); setEditorValue(content); return;
+      }
+      if (action === 'tplVbsMsgBox') {
+        const content = [
+          'MsgBox "Welcome to templates!", 64, "ScriptPad"',
+          '',
+        ].join('\n');
+        suggestName = 'message.vbs'; applyEditorModeByName(suggestName); setEditorValue(content); return;
+      }
+      if (action === 'tplJsNodeHello') {
+        const content = [
+          'function main() {',
+          '  console.log("Hello from Node!");',
+          '}',
+          '',
+          'main();',
+          '',
+        ].join('\n');
+        suggestName = 'node_hello.js'; applyEditorModeByName(suggestName); setEditorValue(content); return;
+      }
+      if (action === 'tplJsBrowserDom') {
+        const content = [
+          '(function(){',
+          '  const el = document.createElement("div");',
+          '  el.textContent = "Hello DOM";',
+          '  document.body.appendChild(el);',
+          '})();',
+          '',
+        ].join('\n');
+        suggestName = 'browser_dom.js'; applyEditorModeByName(suggestName); setEditorValue(content); return;
+      }
+      if (action === 'tplJsAxiosCdn') {
+        const content = [
+          'axios.get("https://api.github.com/repos/seb07uk").then(r => {',
+          '  console.log("Status:", r.status);',
+          '  console.log("Data:", r.data);',
+          '});',
+          '',
+        ].join('\n');
+        suggestName = 'axios_cdn.js'; applyEditorModeByName(suggestName); setEditorValue(content); return;
+      }
+      if (action === 'tplJsLodashCdn') {
+        const content = [
+          'const arr = [1,2,3,4,5];',
+          'const even = _.filter(arr, n => n % 2 === 0);',
+          'console.log(even);',
+          '',
+        ].join('\n');
+        suggestName = 'lodash_cdn.js'; applyEditorModeByName(suggestName); setEditorValue(content); return;
+      }
+      if (action === 'tplJsPackageJson') {
+        const content = [
+          '{',
+          '  "name": "scriptpad-app",',
+          '  "version": "1.0.0",',
+          '  "private": true,',
+          '  "type": "module",',
+          '  "scripts": {',
+          '    "start": "node script.js"',
+          '  },',
+          '  "dependencies": {',
+          '    "axios": "^1.7.7",',
+          '    "lodash": "^4.17.21"',
+          '  }',
+          '}',
+          '',
+        ].join('\n');
+        suggestName = 'package.json'; applyEditorModeByName(suggestName); setEditorValue(content); return;
+      }
+      if (action === 'tplJavaHello') {
+        const content = [
+          'public class Main {',
+          '  public static void main(String[] args) {',
+          '    System.out.println("Hello from template!");',
+          '  }',
+          '}',
+          '',
+        ].join('\n');
+        suggestName = 'Hello.java'; applyEditorModeByName(suggestName); setEditorValue(content); return;
+      }
+      if (action === 'tplJavaPom') {
+        const content = [
+          '<project xmlns="http://maven.apache.org/POM/4.0.0"',
+          '         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"',
+          '         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">',
+          '  <modelVersion>4.0.0</modelVersion>',
+          '  <groupId>example</groupId>',
+          '  <artifactId>demo</artifactId>',
+          '  <version>1.0.0</version>',
+          '  <dependencies>',
+          '    <dependency>',
+          '      <groupId>org.apache.commons</groupId>',
+          '      <artifactId>commons-lang3</artifactId>',
+          '      <version>3.14.0</version>',
+          '    </dependency>',
+          '  </dependencies>',
+          '</project>',
+          '',
+        ].join('\n');
+        suggestName = 'pom.xml'; applyEditorModeByName(suggestName); setEditorValue(content); return;
+      }
+      if (action === 'tplJavaGradle') {
+        const content = [
+          'plugins {',
+          '  id "java"',
+          '}',
+          '',
+          'repositories {',
+          '  mavenCentral()',
+          '}',
+          '',
+          'dependencies {',
+          '  implementation "org.apache.commons:commons-lang3:3.14.0"',
+          '}',
+          '',
+        ].join('\n');
+        suggestName = 'build.gradle'; applyEditorModeByName(suggestName); setEditorValue(content); return;
+      }
+      if (action === 'tplJavaManifest') {
+        const content = [
+          'Manifest-Version: 1.0',
+          'Main-Class: Main',
+          'Class-Path: lib/commons-lang3-3.14.0.jar lib/other.jar',
+          '',
+        ].join('\n');
+        suggestName = 'MANIFEST.MF'; applyEditorModeByName(suggestName); setEditorValue(content); return;
+      }
+      if (action === 'open') { fileInput.click(); return; }
+      if (action === 'save') {
+        const blob = new Blob([ta.value], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = suggestName; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+        return;
+      }
+      if (action === 'saveAs') {
+        const name = prompt('File Name', suggestName) || suggestName;
+        const blob = new Blob([ta.value], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+        return;
+      }
+      if (action === 'exit') { window.close(); alert('Close browser tab (Alt+F4).'); return; }
+      if (action === 'templates') { showModal('Templates'); return; }
+      if (action === 'edit') { showModal('Edit'); return; }
+      if (action === 'run') {
+        try { new Function(ta.value)(); showModal('JavaScript script executed.'); }
+        catch (e) { showModal('Error: ' + e); }
+        return;
+      }
+      if (action === 'find') {
+        const q = prompt('Search');
+        if (!q) return;
+        const start = ta.selectionEnd || 0;
+        const i = ta.value.indexOf(q, start);
+        const j = i >= 0 ? i : ta.value.indexOf(q, 0);
+        hlQuery = q; renderHighlight();
+        if (j >= 0) { ta.focus(); ta.setSelectionRange(j, j + q.length); updateActiveLine(); syncScroll(); }
+        else { showModal('Not found'); }
+        return;
+      }
+      if (action === 'gotoLine') {
+        const v = prompt('Line Number');
+        const ln = v ? parseInt(v, 10) : NaN;
+        if (!isNaN(ln)) setCaretToLine(ln);
+        return;
+      }
+      if (action === 'cmd') { try { openFile('C\\Windows\\System32\\cmd.exe'); } catch {} showModal('Starting Command Prompt'); return; }
+      if (action === 'powershell') { try { openProtocol('powershell:'); } catch {} showModal('Starting PowerShell'); return; }
+      if (action === 'terminal') { try { openProtocol('wt:'); } catch {} showModal('Starting Windows Terminal'); return; }
+      if (action === 'fullscreen') {
+        if (!document.fullscreenElement) document.documentElement.requestFullscreen(); else document.exitFullscreen();
+        return;
+      }
+      if (action === 'topmost') { window.focus(); showModal('TopMost enabled.'); return; }
+      if (action === 'theme') { const d = document.documentElement.classList.toggle('dark'); document.documentElement.removeAttribute('data-theme'); settings.theme = d ? 'dark' : 'light'; saveSettingsLocal(); return; }
+      if (action === 'themeDark') { document.documentElement.removeAttribute('data-theme'); document.documentElement.classList.add('dark'); settings.theme = 'dark'; saveSettingsLocal(); return; }
+      if (action === 'themeLight') { document.documentElement.removeAttribute('data-theme'); document.documentElement.classList.remove('dark'); settings.theme = 'light'; saveSettingsLocal(); return; }
+      if (action === 'themeSilver') { document.documentElement.classList.remove('dark'); document.documentElement.setAttribute('data-theme', 'silver'); settings.theme = 'silver'; saveSettingsLocal(); return; }
+      if (action === 'themeBlue') { document.documentElement.classList.remove('dark'); document.documentElement.setAttribute('data-theme', 'blue'); settings.theme = 'blue'; saveSettingsLocal(); return; }
+      if (action === 'themeRed') { document.documentElement.classList.remove('dark'); document.documentElement.setAttribute('data-theme', 'red'); settings.theme = 'red'; saveSettingsLocal(); return; }
+      if (action === 'about') { showModal(aboutHTML()); return; }
+      if (action === 'help') { showModal(helpHTML()); return; }
+      if (action === 'readme') { showModal('Placeholder for notes'); return; }
+      if (action === 'license') { showModal(licenseHTML()); return; }
+    }
+
+    menubar.addEventListener('click', (e) => {
+      const title = e.target.closest('.menu-title');
+      const item = e.target.closest('button[data-action]');
+      if (title) {
+        const m = title.parentElement;
+        const opened = menubar.querySelector('.menu.open');
+        if (opened && opened !== m) opened.classList.remove('open');
+        const subs = menubar.querySelectorAll('.submenu.open');
+        subs.forEach(s => s.classList.remove('open'));
+        m.classList.toggle('open');
+      }
+      if (item) {
+        const act = item.dataset.action;
+        if (act === 'newMenu') {
+          const menu = item.closest('.menu');
+          const sub = menu && menu.querySelector('.submenu[data-submenu="new"]');
+          const items = menu && menu.querySelector('.menu-items');
+          if (sub && items) {
+            const br = item.getBoundingClientRect();
+            const ir = items.getBoundingClientRect();
+            let top = br.top - ir.top;
+            const maxTop = Math.max(0, ir.height - sub.offsetHeight);
+            top = Math.max(0, Math.min(top, maxTop));
+            sub.style.top = top + 'px';
+            sub.classList.toggle('open');
+          }
+          return;
+        }
+        if (act === 'themeMenu') {
+          const menu = item.closest('.menu');
+          const sub = menu && menu.querySelector('.submenu[data-submenu="theme"]');
+          const items = menu && menu.querySelector('.menu-items');
+          if (sub && items) {
+            const br = item.getBoundingClientRect();
+            const ir = items.getBoundingClientRect();
+            let top = br.top - ir.top;
+            const maxTop = Math.max(0, ir.height - sub.offsetHeight);
+            top = Math.max(0, Math.min(top, maxTop));
+            sub.style.top = top + 'px';
+            sub.classList.toggle('open');
+          }
+          return;
+        }
+        if (act === 'templatesMenu') {
+          const menu = item.closest('.menu');
+          const sub = menu && menu.querySelector('.submenu[data-submenu="templates"]');
+          const items = menu && menu.querySelector('.menu-items');
+          if (sub && items) {
+            const br = item.getBoundingClientRect();
+            const ir = items.getBoundingClientRect();
+            let top = br.top - ir.top;
+            const maxTop = Math.max(0, ir.height - sub.offsetHeight);
+            top = Math.max(0, Math.min(top, maxTop));
+            sub.style.top = top + 'px';
+            sub.classList.toggle('open');
+          }
+          return;
+        }
+        if (act === 'templatesJavaMenu') {
+          const menu = item.closest('.menu');
+          const sub = menu && menu.querySelector('.submenu[data-submenu="templates-java"]');
+          const items = menu && menu.querySelector('.menu-items');
+          if (sub && items) {
+            const br = item.getBoundingClientRect();
+            const ir = items.getBoundingClientRect();
+            let top = br.top - ir.top;
+            const maxTop = Math.max(0, ir.height - sub.offsetHeight);
+            top = Math.max(0, Math.min(top, maxTop));
+            sub.style.top = top + 'px';
+            sub.classList.toggle('open');
+          }
+          return;
+        }
+        if (act === 'templatesJsMenu') {
+          const menu = item.closest('.menu');
+          const sub = menu && menu.querySelector('.submenu[data-submenu="templates-js"]');
+          const items = menu && menu.querySelector('.menu-items');
+          if (sub && items) {
+            const br = item.getBoundingClientRect();
+            const ir = items.getBoundingClientRect();
+            let top = br.top - ir.top;
+            const maxTop = Math.max(0, ir.height - sub.offsetHeight);
+            top = Math.max(0, Math.min(top, maxTop));
+            sub.style.top = top + 'px';
+            sub.classList.toggle('open');
+          }
+          return;
+        }
+        handleAction(act);
+        const m = item.closest('.menu'); if (m) m.classList.remove('open');
+      }
+    });
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('#menubar')) {
+        const opened = menubar.querySelector('.menu.open');
+        if (opened) opened.classList.remove('open');
+        const subs = menubar.querySelectorAll('.submenu.open');
+        subs.forEach(s => s.classList.remove('open'));
+      }
+    });
+    function openProtocol(uri) {
+      const a = document.createElement('a');
+      a.href = uri;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    }
+    async function saveDirHandle(handle) {
+      return new Promise((resolve, reject) => {
+        const req = indexedDB.open('scriptpad', 1);
+        req.onupgradeneeded = () => {
+          const db = req.result;
+          if (!db.objectStoreNames.contains('fs')) db.createObjectStore('fs');
+        };
+        req.onsuccess = () => {
+          const db = req.result;
+          const tx = db.transaction('fs', 'readwrite');
+          tx.objectStore('fs').put(handle, 'scripts');
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => reject(tx.error);
+        };
+        req.onerror = () => reject(req.error);
+      });
+    }
+    async function loadSavedDirHandle() {
+      return new Promise((resolve, reject) => {
+        const req = indexedDB.open('scriptpad', 1);
+        req.onupgradeneeded = () => {
+          const db = req.result;
+          if (!db.objectStoreNames.contains('fs')) db.createObjectStore('fs');
+        };
+        req.onsuccess = () => {
+          const db = req.result;
+          const tx = db.transaction('fs', 'readonly');
+          const g = tx.objectStore('fs').get('scripts');
+          g.onsuccess = () => resolve(g.result || null);
+          g.onerror = () => reject(g.error);
+        };
+        req.onerror = () => reject(req.error);
+      });
+    }
+    async function ensureDirPermission(handle) {
+      try {
+        if (!handle || !handle.queryPermission) return false;
+        const p = await handle.queryPermission({ mode: 'read' });
+        if (p === 'granted') return true;
+        const r = await handle.requestPermission({ mode: 'read' });
+        return r === 'granted';
+      } catch { return false; }
+    }
+    
+    async function selectScriptsFolder() {
+      try {
+        const handle = await window.showDirectoryPicker();
+        if (handle) {
+          scriptsHandle = handle;
+          await saveDirHandle(handle);
+          await renderDirectoryTree(scriptsHandle, scriptsTree);
+        }
+      } catch (e) {
+        // cancelled
+      }
+    }
+    async function loadScriptsFromDefault() {
+      try {
+        const saved = await loadSavedDirHandle();
+        if (saved && (await ensureDirPermission(saved))) {
+          scriptsHandle = saved;
+          await renderDirectoryTree(scriptsHandle, scriptsTree);
+          return;
+        }
+        showModal('<div style="text-align:center">© 2026 polsoft.ITS™. All rights reserved.</div>');
+      } catch (e) { showModal('Error loading folder: ' + e); }
+    }
+    if (sidebarSearch) {
+      sidebarSearch.addEventListener('input', () => {
+        hlQuery = sidebarSearch.value || '';
+        renderHighlight();
+        markTexe(hlQuery);
+      });
+    }
+    if (btnScripts) {
+      btnScripts.addEventListener('click', () => { selectScriptsFolder(); });
+    }
+    function escapeHTML(s) {
+      return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+    function escapeRegExp(s) {
+      return s.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&');
+    }
+    function initCodeMirror() {
+      try {
+        if (!window.CodeMirror || cm) return;
+        cm = window.CodeMirror.fromTextArea(ta, {
+          lineNumbers: false,
+          extraKeys: {
+            'Ctrl-N': () => { handleAction('new'); },
+            'Ctrl-O': () => { handleAction('open'); },
+            'Ctrl-S': () => { handleAction('save'); },
+            'Ctrl-Shift-S': () => { handleAction('saveAs'); },
+            'Ctrl-F': () => { handleAction('find'); },
+            'Ctrl-G': () => { handleAction('gotoLine'); },
+            'F11': () => { handleAction('fullscreen'); }
+          }
+        });
+        cm.on('change', () => { ta.value = cm.getValue(); updateLines(); markTexe(hlQuery); });
+        cm.on('cursorActivity', updateActiveLine);
+        cm.on('scroll', syncScroll);
+      } catch {}
+    }
+    function detectModeFromName(name) {
+      const n = (name || '').toLowerCase();
+      if (n.endsWith('.cpp') || n.endsWith('.cc') || n.endsWith('.cxx')) return 'text/x-c++src';
+      if (n.endsWith('.js') || n.endsWith('.mjs')) return 'javascript';
+      if (n.endsWith('.java')) return 'text/x-java';
+      if (n.endsWith('.css')) return 'css';
+      if (n.endsWith('.py')) return 'python';
+      if (n.endsWith('.sh')) return 'shell';
+      if (n.endsWith('.ps1')) return 'powershell';
+      if (n.endsWith('.vbs')) return 'vb';
+      if (n.endsWith('.hta')) return 'htmlmixed';
+      if (n.endsWith('.xml')) return 'xml';
+      if (n.endsWith('.md')) return 'markdown';
+      if (n.endsWith('.json')) return 'application/json';
+      if (n.endsWith('.reg')) return 'properties';
+      if (n.endsWith('.mf')) return 'properties';
+      if (n.endsWith('.gradle')) return 'groovy';
+      if (n.endsWith('.bat')) return 'shell';
+      return null;
+    }
+    function applyEditorModeByName(name) {
+      const mode = detectModeFromName(name);
+      if (cm) cm.setOption('mode', mode);
+    }
+    function setEditorValue(text) {
+      if (cm) {
+        cm.setValue(text || '');
+      } else {
+        ta.value = text || '';
+      }
+      updateLines();
+      if (!cm) renderHighlight();
+    }
+    function markTexe(query) {
+      if (cm && window.CodeMirror) {
+        for (const m of cmMarks) { try { m.clear(); } catch {} }
+        cmMarks = [];
+        if (!query) return;
+        const cursor = cm.getSearchCursor(query, { line: 0, ch: 0 });
+        while (cursor.findNext()) {
+          cmMarks.push(cm.markText(cursor.from(), cursor.to(), { className: 'cm-markTexe' }));
+        }
+      } else {
+        hlQuery = query || '';
+        renderHighlight();
+      }
+    }
+    function renderHighlight() {
+      if (!hlText) return;
+      if (!hlQuery) { hlText.innerHTML = ''; return; }
+      const v = ta.value;
+      const re = new RegExp(escapeRegExp(hlQuery), 'g');
+      let last = 0;
+      const chunks = [];
+      for (;;) {
+        const m = re.exec(v);
+        if (!m) break;
+        chunks.push(escapeHTML(v.slice(last, m.index)));
+        chunks.push('<span class="hl">', escapeHTML(m[0]), '</span>');
+        last = re.lastIndex;
+      }
+      chunks.push(escapeHTML(v.slice(last)));
+      hlText.innerHTML = chunks.join('');
+    }
+    function applySettings() {
+      document.documentElement.classList.remove('dark');
+      document.documentElement.removeAttribute('data-theme');
+      if (settings.theme === 'dark') {
+        document.documentElement.classList.add('dark');
+      } else if (['silver', 'blue', 'red'].includes(settings.theme)) {
+        document.documentElement.setAttribute('data-theme', settings.theme);
+      }
+      if (editorEl && settings.editorColumns) editorEl.style.gridTemplateColumns = settings.editorColumns;
+    }
+    function loadSettings() {
+      try {
+        const raw = localStorage.getItem(settingsKey);
+        if (raw) {
+          const obj = JSON.parse(raw);
+          if (obj && typeof obj === 'object') Object.assign(settings, obj);
+        }
+      } catch {}
+      applySettings();
+    }
+    function saveSettingsLocal() {
+      try { localStorage.setItem(settingsKey, JSON.stringify(settings)); } catch {}
+      saveSettingsToDisk();
+    }
+    async function saveSettingsToDisk() {
+      try {
+        if (!settingsDirHandle) return;
+        const fileHandle = await settingsDirHandle.getFileHandle('scriptpad-html.json', { create: true });
+        const writable = await fileHandle.createWritable();
+        await writable.write(JSON.stringify(settings, null, 2));
+        await writable.close();
+      } catch (e) { showModal('Cannot save settings: ' + e); }
+    }
+    async function renderDirectoryTree(dirHandle, container) {
+      container.innerHTML = '';
+      const ul = document.createElement('ul');
+      await addDirEntries(dirHandle, ul);
+      container.appendChild(ul);
+    }
+    async function addDirEntries(dirHandle, ul) {
+      const entries = [];
+      for await (const entry of dirHandle.values()) entries.push(entry);
+      entries.sort((a, b) => (a.kind === b.kind ? a.name.localeCompare(b.name) : (a.kind === 'directory' ? -1 : 1)));
+      for (const entry of entries) {
+        const li = document.createElement('li');
+        if (entry.kind === 'directory') {
+          const btn = document.createElement('button');
+          btn.className = 'toggle';
+          btn.textContent = '+';
+          const span = document.createElement('span');
+          span.className = 'dir';
+          span.textContent = entry.name;
+          const nested = document.createElement('ul');
+          nested.style.display = 'none';
+          btn.addEventListener('click', async () => {
+            const open = nested.style.display !== 'none';
+            nested.style.display = open ? 'none' : 'block';
+            btn.textContent = open ? '+' : '−';
+            if (!open && nested.childElementCount === 0) {
+              await addDirEntries(entry, nested);
+            }
+          });
+          li.append(btn, span, nested);
+        } else {
+          const span = document.createElement('span');
+          span.className = 'file';
+          span.textContent = entry.name;
+          span.addEventListener('click', async () => {
+            try {
+              const file = await entry.getFile();
+              const text = await file.text();
+              suggestName = file.name || 'file.txt';
+              applyEditorModeByName(suggestName);
+              setEditorValue(text);
+            } catch (e) { showModal('Cannot read file: ' + e); }
+          });
+          li.appendChild(span);
+        }
+        ul.appendChild(li);
+      }
+    }
+    function aboutHTML() {
+      return (
+        '<div class="about">'
+        + '<h2>ScriptPad v1.0</h2>'
+        + '<h1>HTML</h1>'
+        + '<br>'
+        + '<div>polsoft.ITS London</div>'
+        + '<div>2026(c) Sebastian Januchowski</div>'
+        + '<br>'
+        + '<div>Email : <a href="mailto:polsoft.its@fastservice.com">polsoft.its@fastservice.com</a></div>'
+        + '<div>GitHub: <a href="https://github.com/seb07uk" target="_blank" rel="noopener">https://github.com/seb07uk</a></div>'
+        + '<div>Chomik: <a href="https://chomikuj.pl/polsoft-its" target="_blank" rel="noopener">https://chomikuj.pl/polsoft-its</a></div>'
+        + '<p>Script editor with libraries and templates, script support, syntax highlighting...</p>'
+        + '</div>'
+      );
+    }
+    function helpHTML() {
+      return (
+        '<div class="about">'
+        + '<h2>Help</h2>'
+        + '<h1>Shortcuts</h1>'
+        + '<br>'
+        + '<div>Ctrl+N – New</div>'
+        + '<div>Ctrl+O – Open</div>'
+        + '<div>Ctrl+S – Save</div>'
+        + '<div>Ctrl+Shift+S – Save As…</div>'
+        + '<div>Ctrl+F – Find Text</div>'
+        + '<div>Ctrl+G – Go to Line…</div>'
+        + '<div>F11 – Full Screen</div>'
+        + '<br>'
+        + '<h1>Tips</h1>'
+        + '<div>The Scripts button is used to select a scripts folder.</div>'
+        + '<div>Use the search in the side panel to highlight matches.</div>'
+        + '<div>Click the line number in the gutter to jump to the line.</div>'
+        + '<div>Syntax mode is selected automatically by file extension.</div>'
+        + '</div>'
+      );
+    }
+    function licenseHTML() {
+      return (
+        '<div class="about">'
+        + '<h2>License</h2>'
+        + '<h1>Freeware</h1>'
+        + '<br>'
+        + '<div>Software provided free of charge for private and commercial use.</div>'
+        + '<div>Resale, sublicensing, or distribution for a fee is prohibited.</div>'
+        + '<div>Modification for personal use is permitted; distribution of modified versions requires author\'s consent.</div>'
+        + '<div>Software is provided without any warranty.</div>'
+        + '<br>'
+        + '<div>polsoft.ITS London</div>'
+        + '<div>© 2026  Sebastian Januchowski</div>'
+        + '</div>'
+      );
+    }
+    function openFile(path) {
+      const url = 'file:///' + path.replace(/\\/g, '/');
+      const a = document.createElement('a');
+      a.href = url;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    }
+    document.addEventListener('keydown', (e) => {
+      const k = e.key.toLowerCase();
+      if (e.ctrlKey && k === 'n') { e.preventDefault(); handleAction('new'); }
+      else if (e.ctrlKey && k === 'o') { e.preventDefault(); handleAction('open'); }
+      else if (e.ctrlKey && !e.shiftKey && k === 's') { e.preventDefault(); handleAction('save'); }
+      else if (e.ctrlKey && e.shiftKey && k === 's') { e.preventDefault(); handleAction('saveAs'); }
+      else if (e.ctrlKey && k === 'f') { e.preventDefault(); handleAction('find'); }
+      else if (e.ctrlKey && k === 'g') { e.preventDefault(); handleAction('gotoLine'); }
+      else if (e.key === 'F11') { e.preventDefault(); handleAction('fullscreen'); }
+    });
+
+    fileInput.addEventListener('change', async (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      const text = await file.text();
+      suggestName = file.name || 'file.txt';
+      applyEditorModeByName(suggestName);
+      setEditorValue(text);
+    });
+    
+
+    
+
+    loadSettings();
+    updateLines();
+    initCodeMirror();
+    applyEditorModeByName(suggestName);
+    ta.focus();
+    loadScriptsFromDefault();
+</script>
+</body>
+</html>
