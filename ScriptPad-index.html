@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HTML-ScriptPad | Project Hub & Documentation</title>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-main: #1e1e1e;
+            --bg-sidebar: #252526;
+            --accent: #007acc;
+            --border: #3c3c3c;
+            --text-main: #d4d4d4;
+            --text-dim: #858585;
+            --keyword: #569cd6;
+            --string: #ce9178;
+            --comment: #6a9955;
+            --type: #4ec9b0;
+        }
+
+        body {
+            background-color: var(--bg-main);
+            color: var(--text-main);
+            font-family: 'JetBrains Mono', monospace;
+            margin: 0;
+            display: grid;
+            grid-template-rows: 35px 1fr 25px;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* --- TOP NAVIGATION --- */
+        .menubar {
+            background: var(--bg-sidebar);
+            display: flex;
+            align-items: center;
+            padding: 0 12px;
+            font-size: 13px;
+            border-bottom: 1px solid var(--border);
+            gap: 15px;
+            z-index: 100;
+        }
+
+        .lang-switcher {
+            display: flex;
+            gap: 4px;
+            background: #1a1a1a;
+            padding: 2px;
+            border-radius: 4px;
+            border: 1px solid var(--border);
+        }
+        .lang-btn {
+            padding: 2px 8px;
+            cursor: pointer;
+            font-size: 10px;
+            border-radius: 2px;
+            border: none;
+            background: transparent;
+            color: var(--text-dim);
+            font-weight: 600;
+        }
+        .lang-btn.active { background: var(--accent); color: white; }
+
+        .project-info { margin-left: auto; color: var(--comment); font-size: 11px; }
+
+        /* --- WORKSPACE LAYOUT --- */
+        .workspace {
+            display: grid;
+            grid-template-columns: 310px 1fr;
+            overflow: hidden;
+        }
+
+        .sidebar {
+            background: var(--bg-sidebar);
+            border-right: 1px solid var(--border);
+            padding-top: 10px;
+            overflow-y: auto;
+        }
+        .sidebar-title { 
+            padding: 12px 20px 6px; 
+            font-size: 11px; 
+            color: var(--text-dim); 
+            font-weight: bold; 
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .tree-item { 
+            padding: 6px 20px; 
+            font-size: 12px; 
+            cursor: pointer; 
+            color: var(--text-dim); 
+            display: flex; 
+            align-items: center; 
+            gap: 10px;
+            text-decoration: none;
+        }
+        .tree-item:hover { background: #2a2d2e; color: white; }
+        .tree-item.active { background: #37373d; color: white; border-left: 2px solid var(--accent); }
+        .tree-item i { font-style: normal; width: 16px; text-align: center; }
+
+        /* --- EDITOR AREA --- */
+        .editor-container {
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            background: var(--bg-main);
+        }
+
+        .tabs {
+            background: #252526;
+            display: flex;
+            height: 35px;
+            border-bottom: 1px solid var(--border);
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        .tab {
+            padding: 0 20px;
+            display: flex;
+            align-items: center;
+            font-size: 12px;
+            background: var(--bg-main);
+            border-right: 1px solid var(--border);
+            border-top: 1px solid var(--accent);
+            color: white;
+        }
+
+        .content {
+            padding: 40px;
+            max-width: 900px;
+            margin: 0 auto;
+            line-height: 1.7;
+        }
+
+        /* --- UI COMPONENTS --- */
+        .app-preview {
+            width: 100%;
+            border: 1px solid var(--border);
+            box-shadow: 0 15px 45px rgba(0,0,0,0.6);
+            margin: 25px 0 40px;
+            border-radius: 4px;
+        }
+
+        h1 { color: var(--type); margin-top: 0; font-size: 2.2rem; border-bottom: 1px solid var(--border); padding-bottom: 10px; }
+        h2 { color: var(--keyword); font-size: 1.4rem; margin-top: 45px; margin-bottom: 20px; }
+
+        .feature-box {
+            margin-bottom: 25px;
+            padding: 15px 20px;
+            background: rgba(255,255,255,0.02);
+            border-left: 3px solid var(--accent);
+            border-radius: 0 4px 4px 0;
+        }
+        .feature-box strong { color: var(--string); display: block; margin-bottom: 6px; font-size: 15px; }
+        .feature-box p { font-size: 13px; color: var(--text-main); margin: 0; }
+
+        .download-zone {
+            display: flex;
+            gap: 15px;
+            margin: 35px 0;
+            flex-wrap: wrap;
+        }
+        .btn-download {
+            background: #2d2d2d;
+            color: white;
+            border: 1px solid var(--border);
+            padding: 14px 24px;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 14px;
+            transition: 0.2s;
+            border-radius: 4px;
+            font-weight: 600;
+        }
+        .btn-download:hover { 
+            border-color: var(--accent); 
+            background: #37373d; 
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+
+        .compat-section {
+            text-align: center;
+            margin-top: 60px;
+            padding: 30px;
+            border-top: 1px solid var(--border);
+        }
+
+        /* --- STATUS BAR --- */
+        footer.status-bar {
+            background: var(--accent);
+            display: flex;
+            align-items: center;
+            padding: 0 12px;
+            font-size: 11px;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+
+<nav class="menubar">
+    <div class="lang-switcher">
+        <button class="lang-btn active" id="btn-en" onclick="setLang('en')">EN</button>
+        <button class="lang-btn" id="btn-pl" onclick="setLang('pl')">PL</button>
+    </div>
+    <span id="menu-file" style="color: var(--text-dim)">File</span>
+    <span id="menu-view" style="color: var(--text-dim)">Source Control</span>
+    <div class="project-info">// polsoft.ITS London // build.2026.01.26</div>
+</nav>
+
+<div class="workspace">
+    <aside class="sidebar">
+        <div class="sidebar-title">CURRENT PROJECT</div>
+        <a href="https://github.com/seb07uk/HTML-ScriptPad" target="_blank" class="tree-item active"><i>📄</i> ScriptPad v1.0 HTML</a>
+
+        <div class="sidebar-title">DEVELOPMENT TOOLS</div>
+        <a href="https://github.com/seb07uk/psCLI.Tool" target="_blank" class="tree-item"><i>🛠️</i> psCLI.Tool</a>
+        <a href="https://github.com/seb07uk/WinGet.Deployer" target="_blank" class="tree-item"><i>📦</i> WinGet Deployer v2.1</a>
+        <a href="https://github.com/seb07uk/Advanced_Calculator" target="_blank" class="tree-item"><i>🧮</i> Advanced Calculator v1.0</a>
+
+        <div class="sidebar-title">REPOSITORIES</div>
+        <a href="https://github.com/seb07uk/Batch.Script.Collection" target="_blank" class="tree-item"><i>🐚</i> Batch Script Collection</a>
+        <a href="https://github.com/seb07uk/Windows.Activation.Tools" target="_blank" class="tree-item"><i>🔑</i> Windows Activation Tools</a>
+        <a href="https://github.com/seb07uk/Python" target="_blank" class="tree-item"><i>🐍</i> Written in Python</a>
+    </aside>
+
+    <main class="editor-container">
+        <div class="tabs"><div class="tab">Documentation.md</div></div>
+
+        <div class="content">
+            <span class="comment" id="hero-comment">// Lightweight Professional Code Editor</span>
+            <h1 id="hero-title">HTML-ScriptPad</h1>
+
+            <img src="https://raw.githubusercontent.com/seb07uk/HTML-ScriptPad/refs/heads/main/screenshot.png" alt="Preview" class="app-preview">
+
+            <p id="main-desc" style="font-size: 16px; color: var(--text-main);"></p>
+
+            <h2 id="section-core-title">1. Core Editor Engine</h2>
+            <div id="core-features"></div>
+
+            <h2 id="section-ui-title">2. UI & Personalization</h2>
+            <div id="ui-features"></div>
+
+            <h2 id="download-title">Download Stable Release</h2>
+            <div class="download-zone">
+                <a href="https://github.com/seb07uk/HTML-ScriptPad/releases/download/Web.Developers-IT.Administrator-Programmer/HTML-ScriptPad.v1.0.EN.rar" class="btn-download">
+                    <span style="font-size: 20px;">🇬🇧</span> HTML-ScriptPad (EN)
+                </a>
+                <a href="https://github.com/seb07uk/HTML-ScriptPad/releases/download/Web.Developers-IT.Administrator-Programmer/HTML-ScriptPad.v1.0.PL.rar" class="btn-download">
+                    <span style="font-size: 20px;">🇵🇱</span> HTML-ScriptPad (PL)
+                </a>
+            </div>
+
+            <div class="compat-section">
+                <img src="https://raw.githubusercontent.com/seb07uk/WinGet.Deployer/refs/heads/main/compatible.png" alt="Compatibility" style="max-width: 280px; opacity: 0.8;">
+            </div>
+        </div>
+    </main>
+</div>
+
+<footer class="status-bar">
+    <span style="margin-right: 20px;"> main*</span>
+    <span id="status-ready">Ready</span>
+    <span style="margin-left: auto;">HTML-ScriptPad // polsoft.ITS London</span>
+</footer>
+
+<script>
+    const translations = {
+        en: {
+            menuFile: "File",
+            heroComment: "// Lightweight Professional Code Editor",
+            heroTitle: "HTML-ScriptPad: Overview",
+            mainDesc: "HTML-ScriptPad is a modern, portable code editor designed for speed and flexibility. It bridges the gap between simple text editors and heavy IDEs, providing a robust environment for web and script development without installation.",
+            sectionCore: "1. Core Editor Engine",
+            sectionUI: "2. UI & Personalization",
+            downloadTitle: "Download Stable Release",
+            statusReady: "Ready",
+            coreFeatures: [
+                { title: "Smart Syntax Highlighting", desc: "Powered by the CodeMirror 5 engine, providing real-time syntax coloring for HTML, CSS, JavaScript, Python, PowerShell, and more." },
+                { title: "Universal Language Templates", desc: "Boost productivity with built-in boilerplates for C++, Java, VBScript, and Bash. Start your project with a single click." },
+                { title: "Developer Workflow Tools", desc: "Includes precise line numbering, active line highlighting, and 'Go to Line' feature for efficient debugging." }
+            ],
+            uiFeatures: [
+                { title: "Professional Multi-Theme System", desc: "Choose from 5 high-contrast themes (Dark, Silver, Blue, Red, Light) designed for comfort during long coding sessions." },
+                { title: "Zero-Footprint Portability", desc: "Zero installation required. Runs as a standalone tool from any directory or USB drive. Perfect for IT toolkits." },
+                { title: "Responsive IDE Layout", desc: "Classic development environment feel with a sidebar project explorer and tabbed document interface." }
+            ]
+        },
+        pl: {
+            menuFile: "Plik",
+            heroComment: "// Lekki, profesjonalny edytor kodu",
+            heroTitle: "HTML-ScriptPad: Opis szczegółowy",
+            mainDesc: "HTML-ScriptPad to nowoczesny, przenośny edytor kodu zaprojektowany dla szybkości i elastyczności. Łączy prostotę notatnika z funkcjami IDE, oferując potężne środowisko do tworzenia skryptów bez konieczności instalacji.",
+            sectionCore: "1. Silnik Edytora",
+            sectionUI: "2. Interfejs i Personalizacja",
+            downloadTitle: "Pobierz wersję stabilną",
+            statusReady: "Gotowy",
+            coreFeatures: [
+                { title: "Inteligentne Kolorowanie Składni", desc: "Oparte na silniku CodeMirror 5, zapewnia kolorowanie składni w czasie rzeczywistym dla HTML, CSS, JS, Pythona, PowerShell i innych." },
+                { title: "Uniwersalne Szablony Językowe", desc: "Zwiększ wydajność dzięki wbudowanym szablonom dla C++, Javy, VBScript i Bash. Rozpocznij projekt jednym kliknięciem." },
+                { title: "Narzędzia Programistyczne", desc: "Precyzyjna numeracja linii, podświetlanie aktywnej linii oraz funkcja 'Idź do linii' usprawniają debugowanie." }
+            ],
+            uiFeatures: [
+                { title: "System Motywów Professional", desc: "Wybierz spośród 5 kontrastowych motywów (Dark, Silver, Blue, Red, Light) zaprojektowanych dla ochrony wzroku." },
+                { title: "Pełna Mobilność (Portable)", desc: "Brak konieczności instalacji. Działa jako samodzielne narzędzie z dowolnego folderu lub dysku USB. Idealne dla IT." },
+                { title: "Nowoczesny Layout IDE", desc: "Klasyczny wygląd środowiska programistycznego z eksploratorem projektów i systemem zakładek." }
+            ]
+        }
+    };
+
+    function setLang(lang) {
+        document.getElementById('btn-en').classList.toggle('active', lang === 'en');
+        document.getElementById('btn-pl').classList.toggle('active', lang === 'pl');
+        const t = translations[lang];
+        document.getElementById('menu-file').innerText = t.menuFile;
+        document.getElementById('hero-comment').innerText = t.heroComment;
+        document.getElementById('hero-title').innerText = t.heroTitle;
+        document.getElementById('main-desc').innerText = t.mainDesc;
+        document.getElementById('section-core-title').innerText = t.sectionCore;
+        document.getElementById('section-ui-title').innerText = t.sectionUI;
+        document.getElementById('download-title').innerText = t.downloadTitle;
+        document.getElementById('status-ready').innerText = t.statusReady;
+
+        const render = (id, data) => {
+            const container = document.getElementById(id);
+            container.innerHTML = '';
+            data.forEach(item => {
+                container.innerHTML += `<div class="feature-box"><strong>${item.title}</strong><p>${item.desc}</p></div>`;
+            });
+        };
+        render('core-features', t.coreFeatures);
+        render('ui-features', t.uiFeatures);
+        document.documentElement.lang = lang;
+    }
+    setLang('en');
+</script>
+</body>
+</html>
